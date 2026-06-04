@@ -20,19 +20,18 @@ def run_econometrics_test():
     
     print("Building PyMC Model...")
     with pm.Model() as model:
-        # Priors
-        alpha = pm.Normal("alpha", mu=0, sigma=20)
-        beta = pm.Normal("beta", mu=0, sigma=10)
-        sigma = pm.HalfNormal("sigma", sigma=10)
+        # 1. Standardize priors: Center them on the scale of the standardized data
+        alpha = pm.Normal("alpha", mu=0, sigma=1) 
+        beta = pm.Normal("beta", mu=0, sigma=1)
+        sigma = pm.HalfNormal("sigma", sigma=1)
         
-        # Likelihood
+        # 2. Standardized Likelihood
         mu = alpha + beta * income
         Y_obs = pm.Normal("Y_obs", mu=mu, sigma=sigma, observed=expenditure)
         
-        # 2. Pass the model to your custom WALNUTS sampler
-        print("Passing model to WALNUTS...")
-        idata = sample_walnuts(draws=2000, tune=2000, chains=4)
-    
+        # 3. Use sample_walnuts (this assumes you updated to the 4-chain sampler)
+        idata = sample_walnuts(draws=2000, tune=1000, chains=4)
+
     # 3. Evaluate the results
     print("\n--- Posterior Means ---")
     
