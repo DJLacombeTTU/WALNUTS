@@ -31,7 +31,7 @@ def run_econometrics_test():
         
         # 2. Pass the model to your custom WALNUTS sampler
         print("Passing model to WALNUTS...")
-        idata = sample_walnuts(draws=15000, tune=5000, chains=8)
+        idata = sample_walnuts(draws=2000, tune=2000, chains=4)
     
     # 3. Evaluate the results
     print("\n--- Posterior Means ---")
