@@ -14,7 +14,7 @@ from blackjax.adaptation.dense_window_adaptation import (
 
 def sample_walnuts(model=None, draws=1000, tune=1000, chains=4, random_seed=42):
     model = pm.modelcontext(model)
-    print(f"Auto-assigning WALNUTS sampler...")
+    print("Auto-assigning WALNUTS sampler...")
     print(f"Compiling PyTensor graph to XLA for {chains} chains, {draws} draws, and {tune} tune steps...")
     
     print("Finding MAP estimate for optimal cold-start...")
@@ -45,6 +45,9 @@ def sample_walnuts(model=None, draws=1000, tune=1000, chains=4, random_seed=42):
         inv_mass = jnp.eye(dim)
         window_ends = jnp.array([100, 150, 250, 450, 850])
         
+        # REFACTOR: Pre-compute the reset state to preserve strict XLA typings
+        reset_wel_s = init_dense_welford(dim)
+        
         def scan_body(carry, step_idx):
             state, curr_da_s, curr_wel_s, curr_inv_mass, curr_key = carry
             step_key, next_key = jax.random.split(curr_key)
@@ -64,7 +67,13 @@ def sample_walnuts(model=None, draws=1000, tune=1000, chains=4, random_seed=42):
             
             is_update = jnp.any(step_idx == window_ends)
             next_inv_mass = jnp.where(is_update, get_dense_inverse_mass_matrix(next_wel_s), curr_inv_mass)
-            next_wel_s = tree_util.tree_map(lambda x: jnp.where(is_update, 0.0, x), next_wel_s)
+            
+            # REFACTOR: Safely map back to the strictly-typed initial state
+            next_wel_s = tree_util.tree_map(
+                lambda current, reset: jnp.where(is_update, reset, current), 
+                next_wel_s, 
+                reset_wel_s
+            )
             
             return (next_state, next_da_s, next_wel_s, next_inv_mass, next_key), None
 
