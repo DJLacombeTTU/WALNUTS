@@ -13,7 +13,7 @@ import numpy as np
 
 # Import the functional kernel and the adaptation modules
 from blackjax.mcmc.walnuts import init, build_kernel
-from blackjax.adaptation.dense_window_adaptation import init_da, update_da
+from blackjax.adaptation.dense_window_adaptation import init_dual_averaging, update_dual_averaging
 
 def non_centered_funnel_logpdf(q):
     """
@@ -52,23 +52,23 @@ def run_adapted_vmap_funnel():
     # 2. VECTORIZED WARMUP
     # ---------------------------------------------------------
     def single_chain_warmup(init_state, key):
-        da_state = init_da(init_h=0.1)
+        da_state = init_dual_averaging(initial_step_size=0.1)
         
         def warmup_step(carry, k):
             state, da_s = carry
-            curr_h = jnp.exp(da_s.log_h)
+            curr_h = jnp.exp(da_s.log_step_size)
             kernel = build_kernel(non_centered_funnel_logpdf, inverse_mass_matrix, curr_h)
             next_state, info = kernel(k, state)
             
             # The engine now handles step size bounding internally.
             # target_accept=0.90 is passed to enforce the hierarchical standard.
-            next_da_s = update_da(da_s, info.unhalved_fraction, target_accept=0.90)
+            next_da_s = update_dual_averaging(da_s, info.unhalved_fraction, target_accept=0.90)
             
             return (next_state, next_da_s), None
 
         keys = jax.random.split(key, tune)
         (final_state, final_da_state), _ = jax.lax.scan(warmup_step, (init_state, da_state), keys)
-        return final_state, jnp.exp(final_da_state.log_h_avg)
+        return final_state, jnp.exp(final_da_state.log_step_size_avg)
 
     print(f"Executing {tune} warmup steps across {chains} vectorized chains...")
     keys_w = jax.random.split(key_warmup, chains)

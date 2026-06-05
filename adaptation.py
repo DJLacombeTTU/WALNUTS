@@ -78,8 +78,8 @@ def walnuts_warmup(
     num_dimensions = initial_state["position"].shape[0]
     
     da_state = init_dual_averaging(initial_macro_step)
-    welford_state = init_welford(num_dimensions)
-    inv_mass_matrix = jnp.ones(num_dimensions)
+    welford_state = init_dense_welford(num_dimensions)
+    inv_mass_matrix = jnp.eye(num_dimensions)
     
     # Stan-style expanding windows for iterative preconditioning
     window_ends = jnp.array([100, 150, 250, 450, 850])
@@ -106,12 +106,12 @@ def walnuts_warmup(
         welford_state = tree_util.tree_map(
             lambda old, new: jnp.where(is_slow_window, new, old),
             welford_state,
-            update_welford(welford_state, next_state["position"])
+            update_dense_welford(welford_state, next_state["position"])
         )
         
         # Update mass matrix iteratively to prevent locking in random-walk variance
         is_update_step = jnp.any(step_idx == window_ends)
-        current_inv_mass = jnp.where(is_update_step, get_inverse_mass_matrix(welford_state), current_inv_mass)
+        current_inv_mass = jnp.where(is_update_step, get_dense_inverse_mass_matrix(welford_state), current_inv_mass)
         
         # Flush the Welford state so the next window learns from the improved geometry
         welford_state = tree_util.tree_map(

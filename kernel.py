@@ -4,7 +4,7 @@ from jax import tree_util
 from integrators import new_integrator_state, compute_hamiltonian
 from trajectory import extend_trajectory, check_u_turn
 
-def sample_dense_momentum(rng_key, inverse_mass_matrix):
+def sample_momentum(rng_key, inverse_mass_matrix):
     """
     Samples p ~ N(0, M). 
     Since we have M^-1, we find L = cholesky(M^-1) and solve L^T * p = z

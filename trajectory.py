@@ -4,8 +4,9 @@ from jax import tree_util
 from integrators import micro_routine, compute_hamiltonian
 
 def check_u_turn(momentum_left, momentum_right, momentum_sum, inverse_mass_matrix):
-    rho_left = jnp.dot(momentum_left, inverse_mass_matrix * momentum_sum)
-    rho_right = jnp.dot(momentum_right, inverse_mass_matrix * momentum_sum)
+    inv_mass_mom_sum = jnp.dot(inverse_mass_matrix, momentum_sum)
+    rho_left = jnp.dot(momentum_left, inv_mass_mom_sum)
+    rho_right = jnp.dot(momentum_right, inv_mass_mom_sum)
     return (rho_left < 0) | (rho_right < 0)
 
 def extend_trajectory(

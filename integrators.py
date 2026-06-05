@@ -10,7 +10,7 @@ def new_integrator_state(position, momentum, logprob, logprob_grad):
         "logprob_grad": logprob_grad,
     }
 
-def dense_leapfrog_step(state, step_size, logprob_grad_fn, inverse_mass_matrix):
+def leapfrog_step(state, step_size, logprob_grad_fn, inverse_mass_matrix):
     position = state["position"]
     momentum = state["momentum"]
     
@@ -24,7 +24,7 @@ def dense_leapfrog_step(state, step_size, logprob_grad_fn, inverse_mass_matrix):
     
     return new_integrator_state(position_next, momentum_next, logprob_next, grad_next)
 
-def compute_dense_hamiltonian(state, inverse_mass_matrix):
+def compute_hamiltonian(state, inverse_mass_matrix):
     # K = 0.5 * p^T * M^-1 * p
     M_inv_p = jnp.dot(inverse_mass_matrix, state["momentum"])
     kinetic_energy = 0.5 * jnp.dot(state["momentum"], M_inv_p)
