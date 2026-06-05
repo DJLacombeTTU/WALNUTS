@@ -121,4 +121,4 @@ def sample_walnuts(model=None, draws=1000, tune=1000, chains=4, random_seed=42):
     
     unraveled_trace = jax.vmap(jax.vmap(unravel_fn))(samples)
     trace_dict = {name: np.array(unraveled_trace[name]) for name in var_names}
-    return az.from_dict({"posterior": trace_dict})
+    return az.from_dict(posterior=trace_dict)
