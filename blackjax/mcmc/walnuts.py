@@ -1,7 +1,8 @@
+from typing import Callable, NamedTuple
+
 import jax
 import jax.numpy as jnp
 from jax import tree_util
-from typing import NamedTuple, Callable
 
 
 class WalnutsState(NamedTuple):
@@ -14,7 +15,7 @@ class WalnutsInfo(NamedTuple):
     tree_depth: int
     diverging: bool
     turning: bool
-    unhalved_fraction: float
+    unhalved_fraction: jax.Array | float
 
 
 def init(position: jax.Array, logdensity_fn: Callable) -> WalnutsState:
@@ -35,9 +36,7 @@ def build_kernel(
     # Compute invariant matrices inside the closure scope
     L_inv_mass = jax.scipy.linalg.cholesky(inverse_mass_matrix, lower=True)
 
-    def dense_leapfrog(
-        state: WalnutsState, momentum: jax.Array, step_sz: float
-    ):
+    def dense_leapfrog(state: WalnutsState, momentum: jax.Array, step_sz: float):
         momentum_half = momentum + 0.5 * step_sz * state.logdensity_grad
         position_next = state.position + step_sz * jnp.dot(
             inverse_mass_matrix, momentum_half
@@ -50,18 +49,12 @@ def build_kernel(
         )
 
     def compute_dense_hamiltonian(state: WalnutsState, momentum: jax.Array):
-        kinetic_energy = 0.5 * jnp.dot(
-            momentum, jnp.dot(inverse_mass_matrix, momentum)
-        )
+        kinetic_energy = 0.5 * jnp.dot(momentum, jnp.dot(inverse_mass_matrix, momentum))
         return -state.logdensity + kinetic_energy
 
     def check_dense_u_turn(momentum_left, momentum_right, momentum_sum):
-        rho_left = jnp.dot(
-            momentum_left, jnp.dot(inverse_mass_matrix, momentum_sum)
-        )
-        rho_right = jnp.dot(
-            momentum_right, jnp.dot(inverse_mass_matrix, momentum_sum)
-        )
+        rho_left = jnp.dot(momentum_left, jnp.dot(inverse_mass_matrix, momentum_sum))
+        rho_right = jnp.dot(momentum_right, jnp.dot(inverse_mass_matrix, momentum_sum))
         return (rho_left < 0) | (rho_right < 0)
 
     def dense_micro_routine(
@@ -69,9 +62,7 @@ def build_kernel(
         initial_momentum: jax.Array,
         macro_step_size: float,
     ):
-        initial_energy = compute_dense_hamiltonian(
-            initial_state, initial_momentum
-        )
+        initial_energy = compute_dense_hamiltonian(initial_state, initial_momentum)
 
         def condition_fn(loop_state):
             i, max_error, _, _, _ = loop_state
@@ -87,9 +78,7 @@ def build_kernel(
                 next_state, next_mom = dense_leapfrog(
                     curr_state, curr_mom, micro_step_size
                 )
-                curr_energy = compute_dense_hamiltonian(
-                    next_state, next_mom
-                )
+                curr_energy = compute_dense_hamiltonian(next_state, next_mom)
                 return (
                     next_state,
                     next_mom,
@@ -131,9 +120,7 @@ def build_kernel(
         init_energy,
     ):
         def loop_condition(loop_state):
-            return (loop_state[0] < num_macro_steps) & jnp.logical_not(
-                loop_state[7]
-            )
+            return (loop_state[0] < num_macro_steps) & jnp.logical_not(loop_state[7])
 
         def step_body(loop_state):
             (
@@ -162,9 +149,7 @@ def build_kernel(
             new_log_w = jnp.logaddexp(curr_log_w, log_state_w)
 
             key, subkey = jax.random.split(key)
-            keep = jax.random.uniform(subkey) < jnp.exp(
-                log_state_w - new_log_w
-            )
+            keep = jax.random.uniform(subkey) < jnp.exp(log_state_w - new_log_w)
 
             new_prop_state = tree_util.tree_map(
                 lambda old, new: jnp.where(keep, new, old),
@@ -234,7 +219,7 @@ def build_kernel(
         return jax.scipy.linalg.solve_triangular(L_inv_mass.T, z, lower=False)
 
     def one_step(
-        state: WalnutsState, rng_key: jax.random.PRNGKey
+        state: WalnutsState, rng_key: jax.Array
     ) -> tuple[WalnutsState, WalnutsInfo]:
         key_mom, key_tree = jax.random.split(rng_key)
         init_mom = sample_dense_momentum(key_mom)
@@ -287,9 +272,7 @@ def build_kernel(
                 div,
                 sub_unh,
                 sub_turn,
-            ) = jax.lax.cond(
-                direction == -1, build_left, build_right, operand=None
-            )
+            ) = jax.lax.cond(direction == -1, build_left, build_right, operand=None)
 
             new_left_s = tree_util.tree_map(
                 lambda old, new: jnp.where(direction == -1, new, old),
@@ -305,9 +288,7 @@ def build_kernel(
             new_right_m = jnp.where(direction == 1, bound_m, right_m)
 
             new_log_tot_w = jnp.logaddexp(log_tot_w, log_sub_w)
-            keep = jax.random.uniform(acc_key) < jnp.exp(
-                log_sub_w - new_log_tot_w
-            )
+            keep = jax.random.uniform(acc_key) < jnp.exp(log_sub_w - new_log_tot_w)
 
             final_prop_s = tree_util.tree_map(
                 lambda old, new: jnp.where(keep, new, old), prop_s, new_prop_s
@@ -316,8 +297,7 @@ def build_kernel(
 
             new_mom_sum = mom_sum + sub_mom
             turning = (
-                check_dense_u_turn(new_left_m, new_right_m, new_mom_sum)
-                | sub_turn
+                check_dense_u_turn(new_left_m, new_right_m, new_mom_sum) | sub_turn
             )
             return (
                 depth + 1,
@@ -392,7 +372,7 @@ class walnuts:
     init = staticmethod(init)
     build_kernel = staticmethod(build_kernel)
 
-    def __new__(
+    def __new__(  # type: ignore
         cls,
         logdensity_fn: Callable,
         inverse_mass_matrix: jax.Array,
@@ -414,7 +394,7 @@ class walnuts:
             max_halvings=max_halvings,
         )
 
-        def step_fn(rng_key: jax.random.PRNGKey, state: WalnutsState):
+        def step_fn(rng_key: jax.Array, state: WalnutsState):
             return kernel(state, rng_key)
 
         return SamplingAlgorithm(init_fn, step_fn)
