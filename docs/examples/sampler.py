@@ -7,7 +7,7 @@ from jax.flatten_util import ravel_pytree
 from pymc.sampling.jax import get_jaxified_logp
 from jax import tree_util
 
-from blackjax.mcmc.walnuts import init as walnuts_init, build_kernel
+from blackjax.mcmc.walnuts import walnuts
 from blackjax.adaptation.dense_window_adaptation import (
     init_dual_averaging, update_dual_averaging, init_dense_welford, update_dense_welford, get_dense_inverse_mass_matrix
 )
@@ -34,7 +34,7 @@ def sample_walnuts(model=None, draws=1000, tune=1000, chains=4, random_seed=42):
     key_jitter, key_warmup, key_sample = jax.random.split(rng, 3)
     
     q_inits = q_init + jax.random.normal(key_jitter, (chains, dim)) * 0.1
-    init_states = jax.vmap(lambda q: walnuts_init(q, logprob_fn))(q_inits)
+    init_states = jax.vmap(lambda q: walnuts.init(q, logprob_fn))(q_inits)
     
     keys_warmup = jax.random.split(key_warmup, chains)
     keys_sample = jax.random.split(key_sample, chains)
@@ -53,7 +53,7 @@ def sample_walnuts(model=None, draws=1000, tune=1000, chains=4, random_seed=42):
             step_key, next_key = jax.random.split(curr_key)
             curr_h = jnp.exp(curr_da_s.log_step_size)
             
-            kernel = build_kernel(logprob_fn, curr_inv_mass, curr_h)
+            kernel = walnuts(logprob_fn, curr_inv_mass, curr_h).step
             next_state, info = kernel(step_key, state)
             
             next_da_s = update_dual_averaging(curr_da_s, info.unhalved_fraction)
@@ -85,7 +85,7 @@ def sample_walnuts(model=None, draws=1000, tune=1000, chains=4, random_seed=42):
         }
 
     def single_sample(key, state, inv_mass, opt_h):
-        kernel = build_kernel(logprob_fn, inv_mass, opt_h)
+        kernel = walnuts(logprob_fn, inv_mass, opt_h).step
         
         def scan_body(curr_state, curr_key):
             step_key, next_key = jax.random.split(curr_key)

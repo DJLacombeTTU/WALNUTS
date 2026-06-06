@@ -1,7 +1,11 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
 import jax
 import jax.numpy as jnp
 
-from blackjax.mcmc.walnuts import init, build_kernel
+from blackjax.mcmc.walnuts import walnuts
 
 def test_walnuts():
     # 1. Target Distribution
@@ -11,27 +15,22 @@ def test_walnuts():
 
     # 2. Initialization Test
     position = jnp.array([1.0, -1.0])
-    initial_state = init(position, logdensity_fn)
+    sampler = walnuts(
+        logdensity_fn=logdensity_fn,
+        inverse_mass_matrix=jnp.eye(2),
+        step_size=0.1
+    )
+    initial_state = sampler.init(position)
 
     # Verify state shapes and finite logdensity
     assert initial_state.position.shape == (2,), f"Expected shape (2,), got {initial_state.position.shape}"
     assert initial_state.logdensity_grad.shape == (2,), f"Expected shape (2,), got {initial_state.logdensity_grad.shape}"
     assert jnp.isfinite(initial_state.logdensity), "Log-density is not finite"
 
-    # 3. Kernel Test
-    # Instantiate the transition kernel with identity inverse mass matrix and static step size 0.1
-    inverse_mass_matrix = jnp.eye(2)
-    step_size = 0.1
-    kernel = build_kernel(
-        logdensity_fn=logdensity_fn,
-        inverse_mass_matrix=inverse_mass_matrix,
-        step_size=step_size
-    )
-
     # 4. Transition Test
     # Execute a single step with a PRNG key
     rng_key = jax.random.PRNGKey(42)
-    next_state, info = kernel(rng_key, initial_state)
+    next_state, info = sampler.step(rng_key, initial_state)
 
     # 5. Output Validation
     # Next state should maintain tensor shapes
